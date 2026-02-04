@@ -9,9 +9,9 @@ const VERIFY_TOKEN = "webnest_verify";
 const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
 
-// ===== HEALTH CHECK (IMPORTANT FOR RENDER) =====
+// ===== HEALTH CHECK =====
 app.get("/", (req, res) => {
-  res.status(200).send("WebNest bot is running");
+  res.send("WebNest WhatsApp bot is live");
 });
 
 // ===== WEBHOOK VERIFY =====
@@ -26,12 +26,11 @@ app.get("/webhook", (req, res) => {
   return res.sendStatus(403);
 });
 
-// ===== BOT LOGIC =====
+// ===== RECEIVE MESSAGES =====
 app.post("/webhook", async (req, res) => {
   try {
-    const entry = req.body.entry?.[0];
-    const change = entry?.changes?.[0];
-    const message = change?.value?.messages?.[0];
+    const message =
+      req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
     if (!message || message.type !== "text") {
       return res.sendStatus(200);
@@ -41,25 +40,28 @@ app.post("/webhook", async (req, res) => {
     const text = message.text.body.toLowerCase();
 
     let reply =
-      "Hi 👋 Thanks for contacting WebNest Media.\n\nI’m currently unavailable, but I’ll respond shortly. Feel free to share what you’re looking for in the meantime.";
+      "Hi 👋 Thanks for contacting WebNest Media.\n\nI’m currently unavailable, but feel free to share what you’re looking for and I’ll respond shortly.";
 
     if (text.includes("not interested")) {
       reply =
         "No worries at all 👍 Thanks for letting me know. If anything changes, feel free to reach out.\n\n– WebNest Media";
     }
 
-    await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: from,
-        text: { body: reply },
-      }),
-    });
+    await fetch(
+      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: from,
+          text: { body: reply },
+        }),
+      }
+    );
 
     res.sendStatus(200);
   } catch (err) {
@@ -68,8 +70,8 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// ===== START SERVER (CRITICAL) =====
+// ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`WebNest bot listening on port ${PORT}`);
+  console.log("WebNest WhatsApp bot listening on", PORT);
 });
