@@ -4,74 +4,49 @@ const fetch = require("node-fetch");
 const app = express();
 app.use(express.json());
 
-// ===== CONFIG =====
-const VERIFY_TOKEN = "webnest_verify";
-const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
+const PORT = process.env.PORT || 3000;
 const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const WHATSAPP_TOKEN = process.env.WHATSAPP_TOKEN;
 
-// ===== HEALTH CHECK =====
-app.get("/", (req, res) => {
-  res.send("WebNest WhatsApp bot is live");
-});
-
-// ===== WEBHOOK VERIFY =====
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode === "subscribe" && token === VERIFY_TOKEN) {
+  if (mode === "subscribe" && token === "webnest_verify") {
     return res.status(200).send(challenge);
   }
   return res.sendStatus(403);
 });
 
-// ===== RECEIVE MESSAGES =====
 app.post("/webhook", async (req, res) => {
-  try {
-    const message =
-      req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+  console.log("WEBHOOK HIT:", JSON.stringify(req.body, null, 2));
 
-    if (!message || message.type !== "text") {
-      return res.sendStatus(200);
+  const message =
+    req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+  if (!message || message.type !== "text") return res.sendStatus(200);
+
+  const from = message.from;
+  const text = message.text.body;
+
+  await fetch(
+    `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: from,
+        text: { body: `Auto-reply works! You said: ${text}` },
+      }),
     }
+  );
 
-    const from = message.from;
-    const text = message.text.body.toLowerCase();
-
-    let reply =
-      "Hi 👋 Thanks for contacting WebNest Media.\n\nI’m currently unavailable, but feel free to share what you’re looking for and I’ll respond shortly.";
-
-    if (text.includes("not interested")) {
-      reply =
-        "No worries at all 👍 Thanks for letting me know. If anything changes, feel free to reach out.\n\n– WebNest Media";
-    }
-
-    await fetch(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: from,
-          text: { body: reply },
-        }),
-      }
-    );
-
-    res.sendStatus(200);
-  } catch (err) {
-    console.error("BOT ERROR:", err);
-    res.sendStatus(200);
-  }
+  res.sendStatus(200);
 });
 
-// ===== START SERVER =====
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => {
-  console.log("WebNest WhatsApp bot listening on", PORT);
-});
+app.listen(PORT, "0.0.0.0", () => console.log("Bot listening on port", PORT));
