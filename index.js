@@ -1,5 +1,5 @@
-import express from "express";
-import fetch from "node-fetch";
+const express = require("express");
+const fetch = require("node-fetch");
 
 const app = express();
 app.use(express.json());
@@ -21,6 +21,9 @@ app.get("/webhook", (req, res) => {
   return res.sendStatus(403);
 });
 
+// ===== SIMPLE IN-MEMORY LEADS =====
+const leads = {};
+
 // ===== RECEIVE MESSAGES (POST) =====
 app.post("/webhook", async (req, res) => {
   try {
@@ -33,55 +36,95 @@ app.post("/webhook", async (req, res) => {
     }
 
     const from = message.from;
-    const text = message.text.body.toLowerCase();
+    const text = message.text.body.trim();
+
+    if (!leads[from]) {
+      leads[from] = { step: 0 };
+    }
 
     let reply = "";
 
     // ❌ Not interested
-    if (text.includes("not interested")) {
+    if (text.toLowerCase().includes("not interested")) {
       reply =
-        "No worries at all 👍 Thanks for letting me know. If things change in the future, feel free to reach out anytime.\n\n– WebNest Media";
-
-    // ✅ Interested in website / mockup
-    } else if (
-      text.includes("website") ||
-      text.includes("mockup") ||
-      text.includes("web")
-    ) {
-      reply =
-        "Great 😊 I specialise in clean, high-converting website mockups.\n\nTo get started, could you please share:\n• Your business name\n• Any reference websites\n• Logo or brand colours (if any)\n• What the website is meant to achieve\n\nI’ll take it from there.\n\n– WebNest Media";
-
-    // ℹ️ Default auto-reply
-    } else {
-      reply =
-        "Hi 👋 Thanks for reaching out to WebNest Media.\n\nI’m currently unavailable but I’ll get back to you shortly. In the meantime, feel free to share what you’re looking for so we can move faster.\n\n– WebNest Media";
+        "No worries at all 👍 Thanks for letting me know. If anything changes, feel free to reach out.\n\n– WebNest Media";
+      delete leads[from];
     }
 
-    // ===== SEND MESSAGE =====
-    await fetch(
-      `https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`,
-      {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          to: from,
-          text: { body: reply },
-        }),
-      }
-    );
+    // STEP 0
+    else if (leads[from].step === 0) {
+      reply =
+        "Thanks for getting back to me 😊\n\nTo create a proper website mockup, I just need a few quick details.\n\nFirst — what’s the *business name*?";
+      leads[from].step = 1;
+    }
+
+    // STEP 1
+    else if (leads[from].step === 1) {
+      leads[from].businessName = text;
+      reply =
+        "Got it 👍\n\nWhat type of business is this? (e.g. clinic, barber, restaurant, agency)";
+      leads[from].step = 2;
+    }
+
+    // STEP 2
+    else if (leads[from].step === 2) {
+      leads[from].businessType = text;
+      reply =
+        "Nice.\n\nDo you have any *reference websites* you like? You can paste links or say “none”.";
+      leads[from].step = 3;
+    }
+
+    // STEP 3
+    else if (leads[from].step === 3) {
+      leads[from].references = text;
+      reply =
+        "Do you have *brand colours or a logo*? (If not, just say no.)";
+      leads[from].step = 4;
+    }
+
+    // STEP 4
+    else if (leads[from].step === 4) {
+      leads[from].branding = text;
+      reply =
+        "Last one 👍\n\nWhat’s the *main goal* of the website? (Bookings, sales, credibility, etc.)";
+      leads[from].step = 5;
+    }
+
+    // STEP 5 — DONE
+    else if (leads[from].step === 5) {
+      leads[from].goal = text;
+
+      console.log("NEW LEAD:", leads[from]);
+
+      reply =
+        "Perfect ✅ I’ve got everything I need.\n\nI’ll put together a website mockup and get back to you shortly.\n\n– WebNest Media";
+
+      delete leads[from];
+    }
+
+    // SEND MESSAGE
+    await fetch(`https://graph.facebook.com/v19.0/${PHONE_NUMBER_ID}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to: from,
+        text: { body: reply },
+      }),
+    });
 
     res.sendStatus(200);
   } catch (err) {
-    console.error(err);
+    console.error("BOT ERROR:", err);
     res.sendStatus(200);
   }
 });
 
 // ===== START SERVER =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("Bot running on port", PORT));
-
+app.listen(PORT, () => {
+  console.log("WebNest bot running on port", PORT);
+});
